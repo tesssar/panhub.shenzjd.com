@@ -251,12 +251,9 @@ onMounted(() => {
 
 /* 每行分类卡片 */
 .category-row {
-  background: var(--bg-glass);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-lg);
   padding: 16px;
-  box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -447,7 +444,6 @@ onMounted(() => {
 /* 深色模式 */
 @media (prefers-color-scheme: dark) {
   .category-row {
-    background: rgba(15, 23, 42, 0.7);
     border-color: rgba(255, 255, 255, 0.1);
   }
 
