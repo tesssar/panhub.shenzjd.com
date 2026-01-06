@@ -1,6 +1,6 @@
 <template>
   <div class="home">
-    <!-- 英雄区域 -->
+    <!-- 英雄区域 - 紧凑版 -->
     <header class="hero">
       <div class="hero-content">
         <div class="brand-badge">
@@ -9,8 +9,7 @@
         </div>
         <h1 class="hero-title">全网最全的网盘搜索工具</h1>
         <p class="hero-description">
-          聚合阿里云盘、夸克、百度网盘、115、迅雷等平台<br />
-          实时检索各类分享链接与资源，免费、快速、无广告
+          聚合阿里云盘、夸克、百度网盘、115、迅雷等平台，实时检索各类分享链接与资源
         </p>
       </div>
     </header>
@@ -19,9 +18,12 @@
     <SearchBox
       v-model="kw"
       :loading="searchState.loading"
+      :paused="searchState.paused"
       :placeholder="placeholder"
       @search="onSearch"
-      @reset="resetSearch" />
+      @reset="resetSearch"
+      @pause="pauseSearch"
+      @continue="handleContinueSearch" />
 
     <!-- 统计和过滤器 -->
     <div v-if="searchState.searched" class="stats-bar">
@@ -35,9 +37,13 @@
             <span class="stat-label">用时</span>
             <span class="stat-value">{{ searchState.elapsedMs }}ms</span>
           </span>
-          <span v-if="searchState.deepLoading" class="loading-indicator">
+          <span v-if="searchState.deepLoading && !searchState.paused" class="loading-indicator">
             <span class="pulse-dot"></span>
             <span class="loading-text">持续搜索中...</span>
+          </span>
+          <span v-if="searchState.paused" class="paused-indicator-bar">
+            <span class="pause-icon">⏸</span>
+            <span class="paused-text">搜索已暂停</span>
           </span>
         </div>
 
@@ -103,19 +109,9 @@
       <span>{{ searchState.error }}</span>
     </section>
 
-    <!-- 搜索建议 -->
-    <section v-if="!searchState.searched && !searchState.loading" class="suggestions">
-      <div class="suggestions-card">
-        <h4>💡 搜索建议</h4>
-        <div class="suggestion-tags">
-          <span class="tag" @click="quickSearch('电影')">电影</span>
-          <span class="tag" @click="quickSearch('剧集')">剧集</span>
-          <span class="tag" @click="quickSearch('软件')">软件</span>
-          <span class="tag" @click="quickSearch('学习资料')">学习资料</span>
-          <span class="tag" @click="quickSearch('音乐')">音乐</span>
-          <span class="tag" @click="quickSearch('电子书')">电子书</span>
-        </div>
-      </div>
+    <!-- 热搜推荐 -->
+    <section v-if="!searchState.searched && !searchState.loading" class="hot-search-section">
+      <HotSearchSection :on-search="quickSearch" />
     </section>
   </div>
 </template>
@@ -123,6 +119,7 @@
 <script setup lang="ts">
 import SearchBox from "./SearchBox.vue";
 import ResultGroup from "./ResultGroup.vue";
+import HotSearchSection from "./HotSearchSection.vue";
 import { PLATFORM_INFO } from "~/config/plugins";
 import type { MergedLinks } from "~/server/core/types/models";
 
@@ -187,14 +184,12 @@ const initialVisible = 3;
 const expandedSet = ref<Set<string>>(new Set());
 
 // 使用新的搜索 composable
-const { state: searchState, performSearch, resetSearch, copyLink } = useSearch();
+const { state: searchState, performSearch, resetSearch, copyLink, pauseSearch, continueSearch } = useSearch();
 const { settings } = useSettings();
 
-// 搜索执行
-async function onSearch() {
-  if (!kw.value || searchState.value.loading) return;
-
-  await performSearch({
+// 获取搜索选项
+function getSearchOptions() {
+  return {
     apiBase,
     keyword: kw.value,
     settings: {
@@ -203,13 +198,26 @@ async function onSearch() {
       concurrency: settings.value.concurrency,
       pluginTimeoutMs: settings.value.pluginTimeoutMs,
     },
-  });
+  };
+}
+
+// 搜索执行
+async function onSearch() {
+  if (!kw.value || searchState.value.loading) return;
+
+  await performSearch(getSearchOptions());
 }
 
 // 快速搜索
 async function quickSearch(keyword: string) {
   kw.value = keyword;
   await onSearch();
+}
+
+// 继续搜索（从暂停处继续）
+async function handleContinueSearch() {
+  if (!searchState.value.paused) return;
+  await continueSearch(getSearchOptions());
 }
 
 // 平台信息
@@ -289,30 +297,20 @@ function visibleSorted(items: any[]) {
   gap: 24px;
 }
 
-/* 英雄区域 - 玻璃拟态卡片 */
+/* 英雄区域 - 紧凑版 */
 .hero {
   background: var(--bg-glass);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: var(--radius-xl);
-  padding: 32px;
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: var(--radius-lg);
+  padding: 20px;
   text-align: center;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md);
   position: relative;
   overflow: hidden;
 }
 
-.hero::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, var(--primary), var(--secondary), var(--success));
-  opacity: 0.6;
-}
 
 .hero-content {
   position: relative;
@@ -322,17 +320,17 @@ function visibleSorted(items: any[]) {
 .brand-badge {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(99, 102, 241, 0.1);
-  padding: 6px 16px;
+  gap: 6px;
+  background: rgba(99, 102, 241, 0.08);
+  padding: 4px 12px;
   border-radius: 999px;
-  margin-bottom: 16px;
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  margin-bottom: 10px;
+  border: 1px solid rgba(99, 102, 241, 0.15);
 }
 
 .brand-emoji {
-  font-size: 20px;
-  filter: drop-shadow(0 2px 4px rgba(99, 102, 241, 0.3));
+  font-size: 16px;
+  filter: drop-shadow(0 1px 2px rgba(99, 102, 241, 0.2));
 }
 
 .brand-name {
@@ -341,22 +339,24 @@ function visibleSorted(items: any[]) {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .hero-title {
-  font-size: 32px;
-  font-weight: 800;
-  margin: 0 0 12px 0;
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 6px 0;
   color: var(--text-primary);
-  letter-spacing: -0.5px;
+  letter-spacing: -0.3px;
+  line-height: 1.3;
 }
 
 .hero-description {
-  font-size: 15px;
+  font-size: 13px;
   color: var(--text-secondary);
   margin: 0;
-  line-height: 1.6;
+  line-height: 1.5;
+  opacity: 0.9;
 }
 
 /* 统计和过滤器栏 */
@@ -428,6 +428,27 @@ function visibleSorted(items: any[]) {
   font-size: 13px;
   color: var(--primary);
   font-weight: 500;
+}
+
+/* 暂停状态指示器（统计栏） */
+.paused-indicator-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(245, 158, 11, 0.1);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #f59e0b;
+  font-weight: 500;
+}
+
+.pause-icon {
+  font-size: 14px;
+}
+
+.paused-text {
+  font-size: 13px;
 }
 
 /* 平台过滤器 */
@@ -563,66 +584,24 @@ function visibleSorted(items: any[]) {
   font-size: 18px;
 }
 
-/* 搜索建议 */
-.suggestions {
+/* 热搜推荐 */
+.hot-search-section {
   animation: fadeIn 0.6s ease;
-}
-
-.suggestions-card {
-  background: var(--bg-glass);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-  box-shadow: var(--shadow-md);
-}
-
-.suggestions-card h4 {
-  margin: 0 0 12px 0;
-  font-size: 16px;
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.suggestion-tags {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.tag {
-  padding: 8px 16px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.tag:hover {
-  background: linear-gradient(135deg, var(--primary), var(--secondary));
-  color: white;
-  border-color: transparent;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
 /* 移动端优化 */
 @media (max-width: 640px) {
   .hero {
-    padding: 24px 16px;
-    border-radius: var(--radius-lg);
+    padding: 16px 12px;
+    border-radius: var(--radius-md);
   }
 
   .hero-title {
-    font-size: 24px;
+    font-size: 18px;
   }
 
   .hero-description {
-    font-size: 14px;
+    font-size: 12px;
   }
 
   .stats-bar {
@@ -680,13 +659,13 @@ function visibleSorted(items: any[]) {
 /* 深色模式支持 */
 @media (prefers-color-scheme: dark) {
   .hero {
-    background: rgba(15, 23, 42, 0.7);
-    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(15, 23, 42, 0.6);
+    border-color: rgba(255, 255, 255, 0.08);
   }
 
   .brand-badge {
-    background: rgba(99, 102, 241, 0.15);
-    border-color: rgba(99, 102, 241, 0.3);
+    background: rgba(99, 102, 241, 0.12);
+    border-color: rgba(99, 102, 241, 0.2);
   }
 
   .stat-item {
@@ -728,18 +707,8 @@ function visibleSorted(items: any[]) {
     border-color: rgba(239, 68, 68, 0.4);
   }
 
-  .suggestions-card {
-    background: rgba(15, 23, 42, 0.5);
-    border-color: rgba(255, 255, 255, 0.1);
-  }
-
-  .tag {
-    background: rgba(30, 41, 59, 0.5);
-    border-color: rgba(100, 116, 139, 0.3);
-  }
-
-  .tag:hover {
-    background: linear-gradient(135deg, var(--primary), var(--secondary));
+  .hot-search-section {
+    /* HotSearchSection 组件内部已支持深色模式 */
   }
 }
 
@@ -765,12 +734,11 @@ function visibleSorted(items: any[]) {
   .results-section,
   .empty-state,
   .error-alert,
-  .suggestions {
+  .hot-search-section {
     animation: none;
   }
 
   .filter-pill:hover,
-  .tag:hover,
   .sort-select:hover {
     transform: none;
   }
