@@ -517,7 +517,7 @@ export function useSearch() {
     setMerged({});
     setDeepLoading(false);
 
-    // mySeq 由外部传入，避免重复递增
+    const mySeq = ++searchSeq;
     const start = performance.now();
 
     try {
