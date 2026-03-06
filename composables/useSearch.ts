@@ -14,6 +14,30 @@ export interface SearchOptions {
 }
 
 export function useSearch() {
+  // 在 SSR 期间，返回一个安全的默认实现
+  if (import.meta.server) {
+    return {
+      searchStore: {
+        loading: false,
+        deepLoading: false,
+        paused: false,
+        error: "",
+        searched: false,
+        elapsedMs: 0,
+        total: 0,
+        merged: {},
+        hasResults: false,
+        platforms: [],
+      },
+      performSearch: async () => {},
+      resetSearch: () => {},
+      copyLink: async () => {},
+      cancelActiveRequests: () => {},
+      pauseSearch: () => {},
+      continueSearch: async () => {},
+    };
+  }
+
   const searchStore = useSearchStore();
 
   let searchSeq = 0;
