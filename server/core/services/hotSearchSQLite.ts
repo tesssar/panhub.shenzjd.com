@@ -459,12 +459,34 @@ export class HotSearchSQLiteService {
   }
 }
 
-// 单例模式
-let singleton: HotSearchSQLiteService | undefined;
+const HOT_SEARCH_CONTEXT_KEY = "__panhub_hot_search_service__";
 
+/**
+ * 获取或创建热搜服务实例
+ * 使用全局上下文存储，支持测试时重置
+ */
 export function getOrCreateHotSearchSQLiteService(): HotSearchSQLiteService {
-  if (!singleton) {
-    singleton = new HotSearchSQLiteService();
+  // 尝试从全局上下文获取
+  const context = (globalThis as any)[HOT_SEARCH_CONTEXT_KEY];
+  if (context?.service) {
+    return context.service;
   }
-  return singleton;
+
+  // 创建新实例
+  const service = new HotSearchSQLiteService();
+
+  // 存储到上下文
+  (globalThis as any)[HOT_SEARCH_CONTEXT_KEY] = { service };
+  return service;
+}
+
+/**
+ * 重置热搜服务实例（仅用于测试）
+ */
+export function resetHotSearchService(): void {
+  const context = (globalThis as any)[HOT_SEARCH_CONTEXT_KEY];
+  if (context?.service) {
+    context.service.close();
+  }
+  delete (globalThis as any)[HOT_SEARCH_CONTEXT_KEY];
 }
