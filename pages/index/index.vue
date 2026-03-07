@@ -111,7 +111,7 @@
       <span>{{ searchState.error }}</span>
     </section>
 
-    <!-- 豆瓣热搜 - 影视热榜 -->
+    <!-- 豆瓣电影新片榜 -->
     <section class="douban-hot-section">
       <DoubanHotSection ref="doubanHotRef" :on-search="quickSearch" />
     </section>

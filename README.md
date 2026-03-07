@@ -129,7 +129,7 @@ pnpm test:coverage           # 测试覆盖率
 检查是否挂载数据目录并使用 SQLite 模式：
 ```bash
 curl http://localhost:3000/api/hot-search-stats
-# 应返回 "mode": "sqlite"
+# 应返回 "mode": "json" 或 "memory"
 ```
 
 ### 2. 如何查看热搜数据？
@@ -138,12 +138,14 @@ curl http://localhost:3000/api/hot-search-stats
 curl http://localhost:3000/api/hot-searches?limit=30
 ```
 
-### 3. 内存模式 vs SQLite 模式？
-- **内存模式**：重启丢失数据，无需安装，适合开发/测试
-- **SQLite 模式**：永久保存，需要编译环境，适合生产
-- **Cloudflare Workers**：仅支持内存模式
+### 3. 内存模式 vs JSON 文件模式？
+- **内存模式**：重启丢失数据，Vercel/CF 无持久化时自动使用
+- **JSON 文件模式**：持久化到 `./data/hot-searches.json`，Docker/本地可用
 
-### 4. 热搜记录规则？
+### 4. 豆瓣热搜不显示？
+豆瓣热搜直接抓取豆瓣电影/小组页面，若失败可能因网络或豆瓣反爬。数据缓存 60 分钟。
+
+### 5. 热搜记录规则？
 - 搜索**开始时**立即记录（不管是否有结果）
 - 自动刷新显示
 - 保留最近 30 条高频搜索

@@ -1,11 +1,8 @@
 /**
- * 豆瓣热搜数据源配置
- * 对应 DailyHotApi 路由
+ * 豆瓣电影新片榜配置
+ * 直接抓取豆瓣电影榜页面
  */
 
 export const DOUBAN_HOT_SOURCES = [
-  { id: "douban-movie", label: "电影", route: "douban-movie" },
-  { id: "douban-group", label: "讨论精选", route: "douban-group" },
+  { id: "douban-movie", label: "豆瓣电影", route: "douban-movie" },
 ] as const;
-
-export const DAILYHOT_API_BASE = "https://api-hot.imsyy.top";

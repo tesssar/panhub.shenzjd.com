@@ -2,15 +2,27 @@
   "items": [
     {
       "term": "高分词",
-      "score": 3,
-      "lastSearched": 1772895787314,
+      "score": 4,
+      "lastSearched": 1772896716182,
       "createdAt": 1772895787290
     },
     {
       "term": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "score": 1,
-      "lastSearched": 1772895787330,
+      "score": 2,
+      "lastSearched": 1772896708817,
       "createdAt": 1772895787330
+    },
+    {
+      "term": "寻秦记",
+      "score": 1,
+      "lastSearched": 1772897792949,
+      "createdAt": 1772897792949
+    },
+    {
+      "term": "你行！你上！",
+      "score": 1,
+      "lastSearched": 1772897453837,
+      "createdAt": 1772897453837
     },
     {
       "term": "低分词",
@@ -19,5 +31,5 @@
       "createdAt": 1772895787321
     }
   ],
-  "updatedAt": 1772895787331
+  "updatedAt": 1772897792950
 }

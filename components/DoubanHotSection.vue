@@ -1,36 +1,39 @@
 <template>
   <div v-if="!hasAnyData" class="hidden"></div>
 
-  <div v-else class="douban-hot-section">
+  <div v-else class="douban-movie-section">
     <div class="section-head">
-      <h2 class="section-title">豆瓣热搜</h2>
-      <p class="section-subtitle">点击影视名可快速发起网盘搜索</p>
+      <h2 class="section-title">豆瓣电影 · 新片榜</h2>
+      <p class="section-subtitle">点击电影可快速发起网盘搜索</p>
     </div>
     <div v-if="loading" class="loading-state">
       <div class="spinner"></div>
-      <span>豆瓣热搜加载中…</span>
+      <span>加载中…</span>
     </div>
-    <div v-else class="categories">
-      <div
-        v-for="cat in categoryList"
-        :key="cat.id"
-        v-show="cat.items.length > 0"
-        class="category-block"
+    <div v-else class="movie-grid">
+      <button
+        v-for="item in movieItems"
+        :key="(item.id ?? 0) + item.title"
+        class="movie-card"
+        :aria-label="`搜索 ${extractTerm(item.title)}`"
+        @click="onItemClick(item.title)"
       >
-        <h3 class="category-title">{{ cat.label }}</h3>
-        <div class="tag-cloud">
-          <button
-            v-for="item in cat.items"
-            :key="item.title + (item.id ?? '')"
-            class="tag-item"
-            :style="getTagStyle(item, cat.items)"
-            :aria-label="`搜索 ${extractTerm(item.title)}`"
-            @click="onItemClick(item.title)"
-          >
-            {{ extractTerm(item.title) }}
-          </button>
+        <div class="movie-cover">
+          <img
+            v-if="item.cover && !imgFailed.includes(item.id ?? 0)"
+            :src="proxyCover(item.cover)"
+            :alt="extractTerm(item.title)"
+            loading="lazy"
+            referrerpolicy="no-referrer"
+            @error="onImgError(item.id ?? 0)"
+          />
+          <div v-else class="cover-placeholder">🎬</div>
         </div>
-      </div>
+        <div class="movie-info">
+          <span class="movie-title">{{ extractTerm(item.title) }}</span>
+          <span v-if="item.desc" class="movie-desc">{{ item.desc }}</span>
+        </div>
+      </button>
     </div>
   </div>
 </template>
@@ -64,16 +67,31 @@ const props = defineProps<Props>();
 const loading = ref(false);
 const categories = ref<Record<string, DoubanHotCategory>>({});
 const hasInitialized = ref(false);
+const imgFailed = ref<number[]>([]);
 
-const categoryList = computed(() => Object.values(categories.value));
+function onImgError(id: number) {
+  if (!imgFailed.value.includes(id)) {
+    imgFailed.value = [...imgFailed.value, id];
+  }
+}
+
+const movieItems = computed(() => {
+  const cat = categories.value["douban-movie"];
+  return cat?.items ?? [];
+});
 
 const hasAnyData = computed(() => {
   if (loading.value) return true;
-  return categoryList.value.some((c) => c.items.length > 0);
+  return movieItems.value.length > 0;
 });
 
 function extractTerm(title: string): string {
   return title.replace(/^【[\d.]+】/, "").trim() || title;
+}
+
+function proxyCover(url: string): string {
+  if (!url) return "";
+  return `/api/img?url=${encodeURIComponent(url)}`;
 }
 
 async function fetchDoubanHot() {
@@ -91,32 +109,6 @@ async function fetchDoubanHot() {
   } finally {
     loading.value = false;
   }
-}
-
-function getTagStyle(item: DoubanHotItem, items: DoubanHotItem[]) {
-  if (items.length === 0) return {};
-  const hotValues = items.map((i) => i.hot ?? 0).filter((v) => v > 0);
-  const minHot = hotValues.length ? Math.min(...hotValues) : 0;
-  const maxHot = hotValues.length ? Math.max(...hotValues) : 1;
-  const hot = item.hot ?? 0;
-  const normalized = maxHot > minHot ? (hot - minHot) / (maxHot - minHot) : 0.5;
-
-  const fontSize = 12 + normalized * 12;
-  const fontWeight = hot >= 70 ? 800 : hot >= 40 ? 700 : 600;
-  const opacity = 0.75 + normalized * 0.25;
-  const bgOpacity = 0.08 + normalized * 0.22;
-  const borderOpacity = 0.16 + normalized * 0.3;
-
-  return {
-    fontSize: `${fontSize}px`,
-    color: "var(--primary-dark)",
-    fontWeight,
-    opacity,
-    padding: `${6 + normalized * 2}px ${10 + normalized * 4}px`,
-    margin: `${4 + (1 - normalized) * 2}px`,
-    backgroundColor: `rgba(15, 118, 110, ${bgOpacity.toFixed(3)})`,
-    borderColor: `rgba(15, 118, 110, ${borderOpacity.toFixed(3)})`,
-  };
 }
 
 function onItemClick(title: string) {
@@ -138,7 +130,7 @@ defineExpose({ init, refresh });
 </script>
 
 <style scoped>
-.douban-hot-section {
+.douban-movie-section {
   width: 100%;
 }
 
@@ -147,7 +139,7 @@ defineExpose({ init, refresh });
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .section-title {
@@ -169,7 +161,7 @@ defineExpose({ init, refresh });
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 40px 20px;
+  padding: 48px 20px;
   color: var(--text-secondary);
   background: rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(8px);
@@ -190,103 +182,127 @@ defineExpose({ init, refresh });
   to { transform: rotate(360deg); }
 }
 
-.categories {
+.movie-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+.movie-card {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-}
-
-.category-block {
-  background: rgba(255, 255, 255, 0.55);
+  align-items: stretch;
+  background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(8px);
   border: 1px solid var(--border-light);
-  border-radius: 14px;
-  padding: 18px;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+  text-align: left;
+  padding: 0;
 }
 
-.category-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  margin: 0 0 12px 0;
+.movie-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(15, 118, 110, 0.15);
 }
 
-.tag-cloud {
+.movie-cover {
+  aspect-ratio: 2 / 3;
+  background: linear-gradient(135deg, #e5e7eb 0%, #d1d5db 100%);
+  overflow: hidden;
+}
+
+.movie-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.cover-placeholder {
+  width: 100%;
+  height: 100%;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.tag-item {
-  display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border-medium);
-  border-radius: 999px;
-  cursor: pointer;
-  transition: transform 200ms ease, box-shadow 200ms ease, filter 200ms ease,
-    background-color 200ms ease;
-  white-space: nowrap;
-  text-align: center;
-  line-height: 1.2;
-  user-select: none;
+  font-size: 28px;
 }
 
-.tag-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 7px 14px rgba(15, 118, 110, 0.18);
-  filter: brightness(1.03);
-  z-index: 10;
+.movie-info {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+}
+
+.movie-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.movie-desc {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hidden {
   display: none;
 }
 
-@media (max-width: 640px) {
-  .section-head {
-    flex-direction: column;
-    gap: 4px;
+@media (max-width: 500px) {
+  .movie-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+}
+
+@media (min-width: 640px) {
+  .movie-grid {
+    gap: 14px;
   }
 
-  .section-title {
-    font-size: 15px;
-  }
-
-  .category-block {
-    padding: 14px;
-  }
-
-  .tag-cloud {
-    gap: 6px;
+  .movie-title {
+    font-size: 13px;
   }
 }
 
 @media (prefers-color-scheme: dark) {
-  .category-block,
-  .loading-state {
-    background: rgba(17, 24, 39, 0.5);
+  .loading-state,
+  .movie-card {
+    background: rgba(17, 24, 39, 0.6);
     border-color: rgba(75, 85, 99, 0.4);
   }
 
-  .tag-item {
-    color: #ccfbf1 !important;
+  .movie-cover {
+    background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
   }
 
-  .tag-item:hover {
-    box-shadow: 0 7px 14px rgba(15, 118, 110, 0.28);
+  .movie-card:hover {
+    box-shadow: 0 12px 24px rgba(15, 118, 110, 0.25);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tag-item,
-  .spinner {
+  .spinner,
+  .movie-card {
     animation: none;
     transition: none;
   }
 
-  .tag-item:hover {
+  .movie-card:hover {
     transform: none;
   }
 }

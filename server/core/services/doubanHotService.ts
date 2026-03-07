@@ -1,5 +1,6 @@
-import { fetchWithRetry } from "../utils/fetch";
-import { DOUBAN_HOT_SOURCES, DAILYHOT_API_BASE } from "../../../config/doubanHot";
+import { load } from "cheerio";
+import { ofetch } from "ofetch";
+import { DOUBAN_HOT_SOURCES } from "../../../config/doubanHot";
 import { MemoryCache } from "../cache/memoryCache";
 
 export interface DoubanHotItem {
@@ -24,31 +25,70 @@ export interface DoubanHotResult {
 }
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 60 分钟
-const cache = new MemoryCache<DoubanHotResult>({
-  maxSize: 10,
-});
+const cache = new MemoryCache<DoubanHotResult>({ maxSize: 10 });
+const UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1";
+
+function getNumbers(text: string | undefined): number {
+  if (!text) return 0;
+  const match = text.match(/\d+/);
+  return match ? Number(match[0]) : 0;
+}
 
 function buildCacheKey(categories: string[]): string {
   return `douban-hot:${[...categories].sort().join(",")}`;
 }
 
-function extractSearchTerm(title: string): string {
+export function extractSearchTerm(title: string): string {
   return title.replace(/^【[\d.]+】/, "").trim() || title;
 }
 
-function normalizeItem(raw: { id?: number; title?: string; url?: string; cover?: string; desc?: string; hot?: number }): DoubanHotItem {
-  const title = String(raw?.title || "").trim();
-  return {
-    id: raw?.id,
-    title,
-    url: raw?.url,
-    cover: raw?.cover,
-    desc: raw?.desc,
-    hot: raw?.hot ?? 0,
-  };
+async function scrapeDoubanMovie(): Promise<DoubanHotItem[]> {
+  const url = "https://movie.douban.com/chart/";
+  const html = await ofetch<string>(url, {
+    headers: { "user-agent": UA },
+    timeout: 10000,
+  });
+  const $ = load(html);
+  const items: DoubanHotItem[] = [];
+
+  $(".article tr.item").each((_, el) => {
+    const dom = $(el);
+    const href = dom.find("a").attr("href") || "";
+    const id = getNumbers(href);
+    const rawTitle = dom.find("a").attr("title") || "";
+    const scoreDom = dom.find(".rating_nums");
+    const score = scoreDom.length ? scoreDom.text() : "0.0";
+    const title = rawTitle ? `【${score}】${rawTitle}` : "";
+    if (!title) return;
+
+    const img = dom.find("img");
+    const cover =
+      img.attr("data-src") ||
+      img.attr("data-original") ||
+      img.attr("src") ||
+      undefined;
+
+    items.push({
+      id: id || undefined,
+      title,
+      cover: cover ? (cover.startsWith("//") ? "https:" + cover : cover) : undefined,
+      desc: dom.find("p.pl").text().trim(),
+      hot: getNumbers(dom.find("span.pl").text()),
+      url: href || `https://movie.douban.com/subject/${id}/`,
+    });
+  });
+
+  return items;
 }
 
-export async function fetchDoubanHot(categories?: string[]): Promise<DoubanHotResult> {
+const scrapers: Record<string, () => Promise<DoubanHotItem[]>> = {
+  "douban-movie": scrapeDoubanMovie,
+};
+
+export async function fetchDoubanHot(
+  categories?: string[]
+): Promise<DoubanHotResult> {
   const routeIds = categories?.length
     ? categories
     : DOUBAN_HOT_SOURCES.map((s) => s.route);
@@ -59,36 +99,15 @@ export async function fetchDoubanHot(categories?: string[]): Promise<DoubanHotRe
     return cached.value;
   }
 
-  const sourceMap = new Map(DOUBAN_HOT_SOURCES.map((s) => [s.route, s]));
   const results: DoubanHotResult = { categories: {} };
 
   await Promise.all(
     routeIds.map(async (route) => {
-      const config = sourceMap.get(route);
+      const config = DOUBAN_HOT_SOURCES.find((s) => s.route === route);
       if (!config) return;
 
-      try {
-        const url = `${DAILYHOT_API_BASE}/${route}`;
-        const resp = await fetchWithRetry<{
-          name?: string;
-          title?: string;
-          type?: string;
-          data?: Array<Record<string, unknown>>;
-        }>(url, {}, { timeout: 10000, maxRetries: 2 });
-
-        const rawItems = resp?.data || [];
-        const items = rawItems
-          .map((it) => normalizeItem(it as any))
-          .filter((it) => it.title);
-
-        results.categories[config.id] = {
-          id: config.id,
-          label: config.label,
-          title: resp?.title || config.label,
-          type: resp?.type || "",
-          items,
-        };
-      } catch (_e) {
+      const scrape = scrapers[route];
+      if (!scrape) {
         results.categories[config.id] = {
           id: config.id,
           label: config.label,
@@ -96,6 +115,27 @@ export async function fetchDoubanHot(categories?: string[]): Promise<DoubanHotRe
           type: "",
           items: [],
         };
+        return;
+      }
+
+      try {
+        const items = await scrape();
+        results.categories[config.id] = {
+          id: config.id,
+          label: config.label,
+          title: config.label,
+          type: route === "douban-movie" ? "新片榜" : "讨论精选",
+          items,
+        };
+      } catch (e) {
+        results.categories[config.id] = {
+          id: config.id,
+          label: config.label,
+          title: config.label,
+          type: "",
+          items: [],
+        };
+        console.warn(`[DoubanHot] ${route} 抓取失败:`, (e as Error).message);
       }
     })
   );
@@ -103,5 +143,3 @@ export async function fetchDoubanHot(categories?: string[]): Promise<DoubanHotRe
   cache.set(cacheKey, results, CACHE_TTL_MS);
   return results;
 }
-
-export { extractSearchTerm };
