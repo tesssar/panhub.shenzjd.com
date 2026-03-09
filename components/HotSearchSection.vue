@@ -43,17 +43,19 @@ const loading = ref(false);
 const searches = ref<HotSearchItem[]>([]);
 const hasInitialized = ref(false);
 const tagCloudRef = ref<HTMLElement | null>(null);
+const isUpdating = ref(false);
 let tagCloudInstance: { update: (t: string[]) => void; destroy: () => void } | null = null;
+let updateTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function fetchHotSearches() {
   loading.value = true;
   try {
-    const response = await fetch("/api/hot-searches?limit=40");
+    const response = await fetch("/api/hot-searches?limit=25");
     const data = await response.json();
     if (data.code === 0 && data.data?.hotSearches) {
       searches.value = data.data.hotSearches
         .sort((a: HotSearchItem, b: HotSearchItem) => b.score - a.score)
-        .slice(0, 40);
+        .slice(0, 25);
     } else {
       searches.value = [];
     }
@@ -83,15 +85,30 @@ async function initTagCloud() {
   const terms = getTerms();
   if (terms.length === 0) return;
 
+  // 防抖：避免频繁更新
+  if (isUpdating.value) {
+    if (updateTimer) clearTimeout(updateTimer);
+    updateTimer = setTimeout(() => {
+      isUpdating.value = false;
+      initTagCloud();
+    }, 300);
+    return;
+  }
+
   if (tagCloudInstance) {
+    isUpdating.value = true;
     tagCloudInstance.update(terms);
+    // 更新完成后重置状态
+    setTimeout(() => {
+      isUpdating.value = false;
+    }, 100);
     return;
   }
 
   const TagCloud = (await import("TagCloud")).default;
   tagCloudInstance = TagCloud(tagCloudRef.value, terms, {
-    radius: 165,
-    maxSpeed: "normal",
+    radius: 150,
+    maxSpeed: "slow",
     initSpeed: "slow",
     direction: 135,
     keep: true,
@@ -101,10 +118,15 @@ async function initTagCloud() {
 }
 
 function destroyTagCloud() {
+  if (updateTimer) {
+    clearTimeout(updateTimer);
+    updateTimer = null;
+  }
   if (tagCloudInstance) {
     tagCloudInstance.destroy();
     tagCloudInstance = null;
   }
+  isUpdating.value = false;
 }
 
 function onContainerClick(e: MouseEvent) {
@@ -164,6 +186,9 @@ defineExpose({ init, refresh });
   position: relative;
   width: 100%;
   height: 300px;
+  /* GPU 加速 */
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .tag-cloud-wrap :deep(.hot-tagcloud-item) {
@@ -171,7 +196,10 @@ defineExpose({ init, refresh });
   font-weight: 600 !important;
   font-family: inherit !important;
   cursor: pointer;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.15s ease;
+  /* GPU 加速 */
+  transform: translateZ(0);
+  will-change: transform, opacity;
 }
 
 .tag-cloud-wrap :deep(.hot-tagcloud-item:hover) {
@@ -209,16 +237,16 @@ defineExpose({ init, refresh });
 
 @media (max-width: 640px) {
   .tag-cloud-wrap {
-    min-height: 280px;
-    padding: 16px;
+    min-height: 260px;
+    padding: 12px;
   }
 
   .tag-cloud-wrap :deep(.hot-tagcloud) {
-    height: 260px;
+    height: 240px;
   }
 
   .loading-state {
-    padding: 30px 16px;
+    padding: 24px 12px;
   }
 }
 
