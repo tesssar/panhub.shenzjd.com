@@ -232,13 +232,12 @@ function getSearchOptions() {
   };
 }
 
-// 记录热搜词并刷新展示
+// 记录热搜词
 async function recordHotSearch(keyword: string) {
   const term = keyword?.trim();
   if (!term) return;
   try {
     await $fetch(`${apiBase}/hot-searches`, { method: "POST", body: { term } });
-    hotSearchRef.value?.refresh();
   } catch (_e) {}
 }
 
